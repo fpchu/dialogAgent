@@ -1,0 +1,113 @@
+package com.dagent.textgen
+
+import com.dagent.TextGenAgent.AppraisalResult;
+import com.dagent.TextGenAgent.TextPlan;
+import com.dagent.SemanticLTM;
+
+import java.util.HashMap;
+
+dialect "java"
+
+rule "fire anyway"
+	when
+		ar : AppraisalResult()
+		tp : TextPlan()
+	then
+		tp.setDescription("observed", ar.getObservedFeature());
+end
+
+rule "Same person"
+	when
+		ar : AppraisalResult( getTarget() == getFacing() )
+		tp : TextPlan()
+	then
+		tp.setDescription("Sub", "you");
+end
+
+rule "Other person"
+	when 
+		ar : AppraisalResult()
+		tp : TextPlan()
+		not( AppraisalResult( getTarget() == getFacing() ) )
+	then
+		tp.setDescription("Sub", ar.getTarget());
+end
+
+
+rule "high action desire"
+	when
+		ar : AppraisalResult()
+		tp : TextPlan()
+		eval (ar.getAppraisalDomain("inv") > 0.7) 
+		eval (ar.getAppraisalDomain("dis") < 0.5)
+	then
+		tp.setDescription("strength", "high");
+end
+
+
+rule "mild action desire"
+	when
+		ar : AppraisalResult()
+		tp : TextPlan()
+		eval (ar.getAppraisalDomain("inv") > 0.3 && ar.getAppraisalDomain("inv") < 0.7)
+		eval (ar.getAppraisalDomain("dis") > 0.3 && ar.getAppraisalDomain("dis") < 0.7)
+	then
+		tp.setDescription("strength", "mild");
+end
+
+
+rule "low action desire"
+	when
+		ar : AppraisalResult()
+		tp : TextPlan()
+		eval (ar.getAppraisalDomain("inv") < 0.5) 
+		eval (ar.getAppraisalDomain("dis") > 0.7)
+	then
+		tp.setDescription("strength", "low");
+end
+
+
+rule "Invitation for meal"
+	// This apply only for encountered individuals
+	when
+		ar : AppraisalResult()
+		tp : TextPlan()
+		sm : SemanticLTM()
+		AppraisalResult( getAppraisalDomain("action") > 0.8 )
+	then
+		String target = ar.getTarget();
+		String targetLoveFood = sm.getInstance().getKnownPerson(target).get("fav food");
+		
+		if( sm.getKnownPerson(target).get("status") == "friend" && sm.getFoodType().containsKey(targetLoveFood) ) {
+			String rest = sm.getInstance().getKnownRestaurant(targetLoveFood).get("name");
+			tp.addWish("I know a good " + targetLoveFood + " called " + rest + ". Do you want to have a dinner with me?");
+		}
+		
+		else if ( sm.getKnownPerson(target).get("status") == "friend" && ! sm.getFoodType().containsKey(targetLoveFood) ) {
+			// Choose the restaurant Itself like if target doesn't prefer any type of food.
+			HashMap<String, String> self = sm.getInstance().getKnownPerson("self");
+			String rest = sm.getInstance().getKnownRestaurant(self.get("fav food")).get("name");
+			tp.addWish("i know a good " + self.get("fav food") + " called " + rest + ". Do you want to have a dinner with me?");
+		}
+		
+		
+end
+
+
+rule "Invite for activities"
+	when
+		ar : AppraisalResult()
+		tp : TextPlan()
+		sm : SemanticLTM()
+		AppraisalResult( getAppraisalDomain("action") > 0.8 )
+	then
+		String target = ar.getTarget();
+		String targetLoveAct = sm.getInstance().getKnownPerson(target).get("fav act");
+		
+		if ( sm.getKnownPerson(target).get("status") == "friend" && sm.getActType().containsKey(targetLoveAct)) {
+			HashMap<String, String> act = sm.getInstance().getKnownActivities(targetLoveAct);
+			String actName = act.get("name");
+			tp.addWish("should we go to " + targetLoveAct + " together on " + act.get("Date") + ". There is an event, " + actName + ".");
+		}
+end
+
